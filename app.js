@@ -12,7 +12,7 @@ const GAME_LIST = [
   { id: 5, icon: '🌙', title: 'Spēle 5' },
 ];
 const PARS = { blue: 3, orange: 3, grey: 2 };
-const PHRASE_LETTERS = Array.from(new Set(Array.from(PHRASE).filter(isPhraseLetter))).sort((a, b) => a.localeCompare(b, 'lv'));
+const PHRASE_LETTERS = shuffleLetters(Array.from(new Set(Array.from(PHRASE).filter(isPhraseLetter))).sort((a, b) => a.localeCompare(b, 'lv')));
 
 let state = loadState();
 let timerInterval = null;
@@ -101,9 +101,6 @@ function renderWelcome() {
   return `
     <section class="stack welcome-stack">
       <div class="card stack welcome-card">
-        <div>
-          <h2 class="hero-title">Vārds</h2>
-        </div>
         <input id="nameInput" class="input" placeholder="Ievadi vārdu" maxlength="24" />
         <button id="startAppBtn" class="primary-btn">Start</button>
       </div>
@@ -255,6 +252,7 @@ function renderDiscGolfGame() {
   const bestRows = buildLeaderboard(rounds);
   const currentRelative = currentDiscRelative();
   const currentRating = discRating(currentRelative);
+  const hasLiveRound = hasAnyDiscValue();
   const activeView = state.discGolf.view || 'leaderboard';
 
   return `
@@ -276,19 +274,19 @@ function renderDiscGolfGame() {
         </div>
         <div class="result-box">
           <span class="summary-label">Rezultāts</span>
-          <strong>${relativeScoreToText(currentRelative)}</strong>
+          <strong>${hasLiveRound ? relativeScoreToText(currentRelative) : '-'}</strong>
         </div>
-        <div class="result-box rating-box ${ratingClass(currentRelative)}">
+        <div class="result-box rating-box ${hasLiveRound ? ratingClass(currentRelative) : ''}">
           <span class="summary-label">Tavs Jāņu reitings</span>
-          <strong>${currentRating}</strong>
+          <strong>${hasLiveRound ? currentRating : '-'}</strong>
         </div>
       </div>
 
       <button id="submitDiscRoundBtn" class="primary-btn">Iesniegt apli</button>
 
-      <div class="section-switcher">
-        <button class="section-toggle ${activeView === 'leaderboard' ? 'active' : ''}" data-disc-view="leaderboard">Leaderboard</button>
-        <button class="section-toggle ${activeView === 'myRounds' ? 'active' : ''}" data-disc-view="myRounds">Mani apļi</button>
+      <div class="disc-tabs-shell">
+        <button class="disc-tab ${activeView === 'leaderboard' ? 'active' : ''}" data-disc-view="leaderboard">Leaderboard</button>
+        <button class="disc-tab ${activeView === 'myRounds' ? 'active' : ''}" data-disc-view="myRounds">Mani apļi</button>
       </div>
 
       ${activeView === 'leaderboard' ? `
@@ -336,6 +334,10 @@ function scoreDiff(color) {
   return val - PARS[color];
 }
 
+function hasAnyDiscValue() {
+  return ['blue', 'orange', 'grey'].some(color => state.discGolf.current[color] !== '');
+}
+
 function currentDiscRelative() {
   return scoreDiff('blue') + scoreDiff('orange') + scoreDiff('grey');
 }
@@ -368,8 +370,10 @@ function scoreClass(score) {
 }
 
 function bindWelcome() {
+  const input = document.getElementById('nameInput');
+  input?.focus();
   document.getElementById('startAppBtn').addEventListener('click', () => {
-    const val = document.getElementById('nameInput').value.trim();
+    const val = input.value.trim();
     if (!val) {
       alert('Ievadi vārdu.');
       return;
@@ -523,6 +527,15 @@ function phraseLetterDone(letter) {
     return count + ((current === letter || draftCurrent === letter) ? 1 : 0);
   }, 0);
   return used >= total;
+}
+
+function shuffleLetters(list) {
+  const seeded = [...list];
+  for (let i = seeded.length - 1; i > 0; i--) {
+    const j = (i * 7 + 3) % (i + 1);
+    [seeded[i], seeded[j]] = [seeded[j], seeded[i]];
+  }
+  return seeded;
 }
 
 
