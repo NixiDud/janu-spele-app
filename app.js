@@ -1,5 +1,5 @@
-const APP_KEY = 'janu_spele_app_v1';
-const ADMIN_PIN = '9731';
+const APP_KEY = 'janu_spele_app_v2';
+const ADMIN_PIN = '1234';
 const ORIENTATION_TARGET = {
   1: 'K', 2: 'Ā', 3: 'U', 4: 'R', 5: 'G', 6: 'Ņ', 7: 'N', 8: 'S', 9: 'T', 10: 'J', 11: 'I'
 };
@@ -11,20 +11,8 @@ const GAME_LIST = [
   { id: 4, icon: '🔥', title: 'Spēle 4' },
   { id: 5, icon: '🌙', title: 'Spēle 5' },
 ];
-const MARKERS = [
-  { n: 1, x: 22.2, y: 50.5 },
-  { n: 2, x: 23.7, y: 38.9 },
-  { n: 3, x: 49.4, y: 49.7 },
-  { n: 4, x: 39.2, y: 46.4 },
-  { n: 5, x: 61.8, y: 86.6 },
-  { n: 6, x: 8.0, y: 62.2 },
-  { n: 7, x: 62.2, y: 7.0 },
-  { n: 8, x: 79.5, y: 48.3 },
-  { n: 9, x: 9.4, y: 96.6 },
-  { n: 10, x: 41.0, y: 89.4 },
-  { n: 11, x: 56.3, y: 69.0 },
-];
 const PARS = { blue: 3, orange: 3, grey: 2 };
+const PHRASE_LETTERS = Array.from(new Set(Object.values(ORIENTATION_TARGET)));
 
 let state = loadState();
 let timerInterval = null;
@@ -39,9 +27,8 @@ function defaultState() {
       startedAt: null,
       completedAt: null,
       letters: {},
-      checked: false,
-      phraseLocks: Array.from(PHRASE).map(ch => (/[A-ZĀČĒĢĪĶĻŅŠŪŽ]/.test(ch) ? '' : ch)),
-      phraseDraft: Array.from(PHRASE).map(ch => (/[A-ZĀČĒĢĪĶĻŅŠŪŽ]/.test(ch) ? '' : ch)),
+      phraseLocks: Array.from(PHRASE).map(ch => (isPhraseLetter(ch) ? '' : ch)),
+      phraseDraft: Array.from(PHRASE).map(ch => (isPhraseLetter(ch) ? '' : ch)),
       finished: false,
       finalTimeSec: null,
     },
@@ -52,11 +39,26 @@ function defaultState() {
   };
 }
 
+function normalizeState(rawState) {
+  const base = defaultState();
+  const merged = { ...base, ...rawState };
+  merged.orientation = { ...base.orientation, ...(rawState.orientation || {}) };
+  merged.discGolf = { ...base.discGolf, ...(rawState.discGolf || {}) };
+  merged.discGolf.current = { ...base.discGolf.current, ...((rawState.discGolf || {}).current || {}) };
+  if (!Array.isArray(merged.orientation.phraseLocks) || merged.orientation.phraseLocks.length !== PHRASE.length) {
+    merged.orientation.phraseLocks = base.orientation.phraseLocks;
+  }
+  if (!Array.isArray(merged.orientation.phraseDraft) || merged.orientation.phraseDraft.length !== PHRASE.length) {
+    merged.orientation.phraseDraft = base.orientation.phraseDraft;
+  }
+  return merged;
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(APP_KEY);
     if (!raw) return defaultState();
-    return { ...defaultState(), ...JSON.parse(raw) };
+    return normalizeState(JSON.parse(raw));
   } catch {
     return defaultState();
   }
@@ -64,6 +66,10 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(APP_KEY, JSON.stringify(state));
+}
+
+function isPhraseLetter(char) {
+  return /[A-ZĀČĒĢĪĶĻŅŠŪŽ]/.test(char);
 }
 
 function relativeScoreToText(score) {
@@ -85,17 +91,14 @@ function render() {
 
 function renderWelcome() {
   return `
-    <section class="stack">
-      <div class="card stack">
+    <section class="stack welcome-stack">
+      <div class="card stack welcome-card">
         <div>
-          <p class="eyebrow">Sveicināta!</p>
-          <h2 class="hero-title">Ievadi savu vārdu</h2>
-          <p class="muted">Pēc starta atvērsies pirmā spēle. Šī versija ir gatava lokālai lietošanai vienā telefonā vai testiem.</p>
+          <h2 class="hero-title">Vārds</h2>
         </div>
         <input id="nameInput" class="input" placeholder="Ievadi vārdu" maxlength="24" />
-        <button id="startAppBtn" class="primary-btn">Starts</button>
+        <button id="startAppBtn" class="primary-btn">Start</button>
       </div>
-      <p class="footer-note">Admin poga ir augšējā labajā stūrī.</p>
     </section>
   `;
 }
@@ -117,10 +120,13 @@ function renderGameScreen() {
   const currentGame = GAME_LIST.find(g => g.id === state.currentGame);
   return `
     <section class="stack">
-      <div class="card stack">
-        <div>
-          <p class="eyebrow">Spēlētājs</p>
-          <h2 class="section-title">${escapeHtml(state.playerName)}</h2>
+      <div class="card compact-card stack">
+        <div class="player-row">
+          <div>
+            <p class="eyebrow">Spēlētājs</p>
+            <h2 class="section-title">${escapeHtml(state.playerName)}</h2>
+          </div>
+          ${state.currentGame === 1 ? `<span class="timer-pill">⏱️ <span id="orientationTimer">${formatOrientationTime()}</span></span>` : ''}
         </div>
         ${renderGameTabs()}
       </div>
@@ -128,7 +134,6 @@ function renderGameScreen() {
       <div class="card stack">
         <div class="meta-row">
           <span class="status-pill">${currentGame.icon} ${currentGame.title}</span>
-          ${state.currentGame === 1 ? `<span class="timer-pill">⏱️ <span id="orientationTimer">${formatOrientationTime()}</span></span>` : ''}
         </div>
         ${renderCurrentGame()}
       </div>
@@ -146,7 +151,6 @@ function renderCurrentGame() {
       return `
         <div class="placeholder-box stack">
           <h3 class="section-title">Šī spēle vēl top</h3>
-          <p class="muted">Lapa ir gatava. Saturu varam pielikt nākamajā solī.</p>
         </div>
       `;
     default: return '<p>Kļūda.</p>';
@@ -163,52 +167,35 @@ function formatOrientationTime() {
 
 function renderOrientationGame() {
   const o = state.orientation;
-  const allEntered = Object.keys(o.letters).length === 11 && Object.values(o.letters).every(Boolean);
-  const showPhrase = allOrientationCorrect();
+  const solvedLetters = allOrientationCorrect();
 
   return `
     <div class="stack">
-      <div class="stack">
-        <div>
-          <h3 class="section-title">Orientēšanās</h3>
-          <p class="muted small">Atrodi burtus pie visiem 11 punktiem. Pārbaude notiek tikai tad, kad visi lauki ir aizpildīti.</p>
-        </div>
-        ${!o.startedAt ? `<button id="startOrientationBtn" class="primary-btn">Sākt</button>` : ''}
-      </div>
-
-      <div class="map-wrap">
+      <div class="map-wrap clean-map-wrap">
         <img src="assets/orientesanas.png" alt="Orientēšanās karte" class="map-image" />
-        ${MARKERS.map(m => {
-          const val = o.letters[m.n] || '';
-          const status = o.checked ? ((val || '').toUpperCase() === ORIENTATION_TARGET[m.n] ? 'correct' : 'incorrect') : (val ? 'filled' : '');
-          return `<button class="marker-btn ${status}" data-marker="${m.n}" style="left:${m.x}%; top:${m.y}%">${m.n}</button>`;
-        }).join('')}
       </div>
 
-      <div class="letter-grid">
-        ${MARKERS.map(m => {
-          const val = (o.letters[m.n] || '').toUpperCase();
-          const correct = val && val === ORIENTATION_TARGET[m.n];
-          const incorrect = o.checked && val && !correct;
+      <div class="letter-grid input-grid">
+        ${Array.from({ length: 11 }, (_, idx) => idx + 1).map(n => {
+          const value = (o.letters[n] || '').toUpperCase();
+          const status = !value ? '' : (value === ORIENTATION_TARGET[n] ? 'correct' : 'incorrect');
           return `
-            <div class="letter-card ${correct ? 'correct' : ''} ${incorrect ? 'incorrect' : ''}">
-              <div class="letter-card-top">${m.n}</div>
-              <div class="letter-card-bottom">${val || '—'}</div>
-            </div>
+            <label class="letter-card ${status}">
+              <div class="letter-card-top">${n}</div>
+              <input
+                class="letter-input"
+                data-letter-index="${n}"
+                maxlength="1"
+                value="${escapeAttr(value)}"
+                placeholder="—"
+                autocomplete="off"
+              />
+            </label>
           `;
         }).join('')}
       </div>
 
-      ${o.startedAt ? `
-        <div class="grid-2">
-          <button id="checkOrientationBtn" class="secondary-btn" ${!allEntered ? 'disabled' : ''}>Pārbaudīt</button>
-          <button id="resetOrientationBtn" class="danger-btn">Sākt no jauna</button>
-        </div>
-      ` : ''}
-
-      ${o.checked && !showPhrase ? `<p class="muted small">Zaļie ir pareizi. Sarkanajiem izlabo burtu un pārbaudi vēlreiz.</p>` : ''}
-
-      ${showPhrase ? renderPhrasePuzzle() : ''}
+      ${solvedLetters ? renderPhrasePuzzle() : ''}
     </div>
   `;
 }
@@ -216,11 +203,11 @@ function renderOrientationGame() {
 function renderPhrasePuzzle() {
   const o = state.orientation;
   const solved = o.finished;
+  const activeIndex = nextPhraseIndex();
   return `
-    <div class="card stack" style="padding:16px; background: rgba(255,255,255,0.04);">
+    <div class="card inset-card stack">
       <div>
         <h3 class="section-title">Atmini teikumu</h3>
-        <p class="muted small">Kad visi burti ievadīti, pareizie ie-lockojas vietā, nepareizie tiek iztīrīti.</p>
       </div>
 
       <div class="wordle-wrap">
@@ -230,24 +217,26 @@ function renderPhrasePuzzle() {
             if (/[,.!?]/.test(char)) return `<div class="phrase-punct">${char}</div>`;
             const locked = o.phraseLocks[index];
             const draft = o.phraseDraft[index] || '';
-            return `<input maxlength="1" data-phrase-index="${index}" class="phrase-box ${locked ? 'locked' : ''}" value="${escapeAttr(locked || draft)}" ${locked ? 'disabled' : ''} />`;
+            return `<button class="phrase-box ${locked ? 'locked' : ''} ${activeIndex === index ? 'active' : ''}" data-phrase-slot="${index}" ${locked ? 'disabled' : ''}>${escapeHtml(locked || draft || '')}</button>`;
           }).join('')}
         </div>
 
-        <div>
-          <p class="small muted">Dotie burti secībā 1-11:</p>
-          <div class="letter-bank">
-            ${Object.entries(ORIENTATION_TARGET).map(([n, letter]) => `<div class="bank-item"><strong>${n}</strong><br>${letter}</div>`).join('')}
-          </div>
+        <div class="letter-bank phrase-bank">
+          ${PHRASE_LETTERS.map(letter => `
+            <button class="bank-item ${phraseLetterDone(letter) ? 'done' : ''}" data-bank-letter="${letter}" ${solved ? 'disabled' : ''}>${letter}</button>
+          `).join('')}
         </div>
 
-        ${!solved ? `<button id="submitPhraseBtn" class="primary-btn">Pārbaudīt teikumu</button>` : ''}
+        <div class="grid-2">
+          <button id="phraseBackspaceBtn" class="secondary-btn" ${solved ? 'disabled' : ''}>⌫ Dzēst</button>
+          <button id="phraseClearTryBtn" class="secondary-btn" ${solved ? 'disabled' : ''}>Notīrīt mēģ.</button>
+        </div>
       </div>
 
       ${solved ? `
         <div class="stack">
           <div class="status-pill">🎉 Gatavs! Laiks: ${formatSeconds(o.finalTimeSec || 0)}</div>
-          <p class="muted">Teikums atminēts: <strong>${PHRASE}</strong></p>
+          <p class="muted"><strong>${PHRASE}</strong></p>
         </div>
       ` : ''}
     </div>
@@ -256,45 +245,46 @@ function renderPhrasePuzzle() {
 
 function renderDiscGolfGame() {
   const rounds = state.discGolf.rounds;
-  const bestRows = [...rounds].sort((a,b) => a.relative - b.relative || a.totalThrows - b.totalThrows).slice(0, 10);
+  const playerRounds = rounds.filter(r => r.player === state.playerName);
+  const bestRows = buildLeaderboard(rounds);
+  const currentRelative = currentDiscRelative();
+  const currentRating = discRating(currentRelative);
 
   return `
     <div class="stack">
-      <div>
-        <h3 class="section-title">Disku golfs</h3>
-        <p class="muted small">Zilais PAR 3, Oranžais PAR 3, Pelēkais PAR 2. Rezultāts pārrēķinās uzreiz.</p>
-      </div>
-
       <div class="map-wrap">
         <img src="assets/disku-golfs.png" alt="Disku golfa trase" class="map-image" />
       </div>
 
-      <div class="stack">
-        <div class="score-row">
-          <input id="scoreBlue" class="score-input" type="number" min="1" placeholder="Zilais grozs (PAR 3)" value="${state.discGolf.current.blue}" />
-          <div class="score-tag ${scoreClass(scoreDiff('blue'))}">Z ${relativeScoreToText(scoreDiff('blue'))}</div>
+      <div class="basket-stack">
+        ${renderBasketCard('ZILAIS', 'blue', PARS.blue)}
+        ${renderBasketCard('ORANŽAIS', 'orange', PARS.orange)}
+        ${renderBasketCard('PELĒKAIS', 'grey', PARS.grey)}
+      </div>
+
+      <div class="result-summary">
+        <div class="result-box">
+          <span class="summary-label">PAR</span>
+          <strong>8</strong>
         </div>
-        <div class="score-row">
-          <input id="scoreOrange" class="score-input" type="number" min="1" placeholder="Oranžais grozs (PAR 3)" value="${state.discGolf.current.orange}" />
-          <div class="score-tag ${scoreClass(scoreDiff('orange'))}">O ${relativeScoreToText(scoreDiff('orange'))}</div>
+        <div class="result-box">
+          <span class="summary-label">Rezultāts</span>
+          <strong>${relativeScoreToText(currentRelative)}</strong>
         </div>
-        <div class="score-row">
-          <input id="scoreGrey" class="score-input" type="number" min="1" placeholder="Pelēkais grozs (PAR 2)" value="${state.discGolf.current.grey}" />
-          <div class="score-tag ${scoreClass(scoreDiff('grey'))}">P ${relativeScoreToText(scoreDiff('grey'))}</div>
+        <div class="result-box rating-box ${ratingClass(currentRelative)}">
+          <span class="summary-label">Tavs Jāņu reitings</span>
+          <strong>${currentRating}</strong>
         </div>
       </div>
 
-      <div class="status-pill">Kopējais rezultāts: ${relativeScoreToText(currentDiscRelative())}</div>
-
       <div class="grid-2">
         <button id="submitDiscRoundBtn" class="primary-btn">Iesniegt apli</button>
-        <button id="resetDiscCurrentBtn" class="secondary-btn">Notīrīt ievadi</button>
+        <button id="resetDiscCurrentBtn" class="secondary-btn">Spēlēt vēlreiz</button>
       </div>
 
       <div class="stack">
         <h4 class="section-title">Līderu tops</h4>
-        <p class="muted small">Šajā bezmaksas lokālajā versijā tops strādā tikai uz šīs ierīces. Visiem kopīgs tops prasīs mazu bezmaksas datubāzi nākamajā solī.</p>
-        <div class="table">
+        <div class="table leaderboard-table">
           <div class="table-row head"><div>Vārds</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div></div>
           ${bestRows.length ? bestRows.map(r => `
             <div class="table-row"><div>${escapeHtml(r.player)}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div></div>
@@ -304,9 +294,9 @@ function renderDiscGolfGame() {
 
       <div class="stack">
         <h4 class="section-title">Mani apļi</h4>
-        <div class="table">
+        <div class="table leaderboard-table">
           <div class="table-row head"><div>Reize</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div></div>
-          ${rounds.filter(r => r.player === state.playerName).length ? rounds.filter(r => r.player === state.playerName).map((r, i) => `
+          ${playerRounds.length ? playerRounds.map((r, i) => `
             <div class="table-row"><div>#${i + 1}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div></div>
           `).join('') : '<div class="table-row"><div>Vēl nav</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
         </div>
@@ -315,14 +305,51 @@ function renderDiscGolfGame() {
   `;
 }
 
+function renderBasketCard(title, color, par) {
+  const id = capitalize(color);
+  return `
+    <div class="basket-card ${color}">
+      <div>
+        <div class="basket-title">${title}</div>
+        <div class="basket-par">PAR ${par}</div>
+      </div>
+      <input id="score${id}" class="score-input big-score-input" type="number" min="1" inputmode="numeric" value="${state.discGolf.current[color]}" placeholder="0" />
+      <div class="score-tag ${scoreClass(scoreDiff(color))}">${relativeScoreToText(scoreDiff(color))}</div>
+    </div>
+  `;
+}
+
 function scoreDiff(color) {
-  const val = Number(state.discGolf.current[color]);
-  if (!val) return 0;
+  const raw = state.discGolf.current[color];
+  if (raw === '' || raw == null) return 0;
+  const val = Number(raw);
+  if (!Number.isFinite(val)) return 0;
   return val - PARS[color];
 }
 
 function currentDiscRelative() {
   return scoreDiff('blue') + scoreDiff('orange') + scoreDiff('grey');
+}
+
+function discRating(relative) {
+  return 1000 - (relative * 50);
+}
+
+function ratingClass(relative) {
+  if (relative < 0) return 'up';
+  if (relative > 0) return 'down';
+  return 'even';
+}
+
+function buildLeaderboard(rounds) {
+  const bestByPlayer = new Map();
+  rounds.forEach(round => {
+    const existing = bestByPlayer.get(round.player);
+    if (!existing || round.relative < existing.relative || (round.relative === existing.relative && round.totalThrows < existing.totalThrows)) {
+      bestByPlayer.set(round.player, round);
+    }
+  });
+  return [...bestByPlayer.values()].sort((a, b) => a.relative - b.relative || a.totalThrows - b.totalThrows).slice(0, 10);
 }
 
 function scoreClass(score) {
@@ -339,7 +366,9 @@ function bindWelcome() {
       return;
     }
     state.playerName = val;
+    if (!state.orientation.startedAt) state.orientation.startedAt = Date.now();
     saveState();
+    startTimer();
     render();
   });
 }
@@ -363,55 +392,36 @@ function bindGameScreen() {
 }
 
 function bindOrientationGame() {
-  const startBtn = document.getElementById('startOrientationBtn');
-  if (startBtn) {
-    startBtn.onclick = () => {
-      state.orientation.startedAt = Date.now();
-      saveState();
-      startTimer();
-      render();
-    };
-  }
-
-  document.querySelectorAll('[data-marker]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!state.orientation.startedAt) return;
-      openLetterModal(Number(btn.dataset.marker));
-    });
-  });
-
-  const checkBtn = document.getElementById('checkOrientationBtn');
-  if (checkBtn) {
-    checkBtn.onclick = () => {
-      state.orientation.checked = true;
-      saveState();
-      render();
-    };
-  }
-
-  const resetBtn = document.getElementById('resetOrientationBtn');
-  if (resetBtn) {
-    resetBtn.onclick = () => {
-      if (!confirm('Tiešām notīrīt orientēšanos?')) return;
-      state.orientation = defaultState().orientation;
-      saveState();
-      stopTimer();
-      render();
-    };
-  }
-
-  document.querySelectorAll('[data-phrase-index]').forEach(input => {
+  document.querySelectorAll('[data-letter-index]').forEach(input => {
     input.addEventListener('input', (e) => {
-      const index = Number(e.target.dataset.phraseIndex);
-      state.orientation.phraseDraft[index] = e.target.value.toUpperCase();
+      const index = Number(e.target.dataset.letterIndex);
+      const value = (e.target.value || '').trim().toUpperCase().slice(0, 1);
+      state.orientation.letters[index] = value;
+      if (allOrientationCorrect() && !state.orientation.finished) {
+        primePhraseDraft();
+      }
       saveState();
+      render();
     });
   });
 
-  const submitPhraseBtn = document.getElementById('submitPhraseBtn');
-  if (submitPhraseBtn) {
-    submitPhraseBtn.onclick = submitPhrase;
-  }
+  document.querySelectorAll('[data-bank-letter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      insertPhraseLetter(btn.dataset.bankLetter);
+    });
+  });
+
+  document.querySelectorAll('[data-phrase-slot]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const index = Number(btn.dataset.phraseSlot);
+      setPhraseCursor(index);
+      saveState();
+      render();
+    });
+  });
+
+  document.getElementById('phraseBackspaceBtn')?.addEventListener('click', backspacePhrase);
+  document.getElementById('phraseClearTryBtn')?.addEventListener('click', clearPhraseAttempt);
 
   if (state.orientation.startedAt && !state.orientation.finished) startTimer();
 }
@@ -420,51 +430,49 @@ function allOrientationCorrect() {
   return Object.keys(ORIENTATION_TARGET).every(n => (state.orientation.letters[n] || '').toUpperCase() === ORIENTATION_TARGET[n]);
 }
 
-function openLetterModal(markerNumber) {
-  const root = document.getElementById('modalRoot');
-  const current = state.orientation.letters[markerNumber] || '';
-  root.innerHTML = `
-    <div class="modal-backdrop">
-      <div class="modal-card stack">
-        <div>
-          <p class="eyebrow">Punkts ${markerNumber}</p>
-          <h3 class="section-title">Ievadi atrasto burtu</h3>
-        </div>
-        <input id="markerLetterInput" class="input" maxlength="1" value="${escapeAttr(current)}" placeholder="Burts" />
-        <div class="grid-2">
-          <button id="saveMarkerLetterBtn" class="primary-btn">Saglabāt</button>
-          <button id="closeModalBtn" class="secondary-btn">Aizvērt</button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.getElementById('markerLetterInput').focus();
-  document.getElementById('saveMarkerLetterBtn').onclick = () => {
-    const val = document.getElementById('markerLetterInput').value.trim().toUpperCase();
-    if (!val) {
-      alert('Ievadi burtu.');
-      return;
-    }
-    state.orientation.letters[markerNumber] = val;
-    state.orientation.checked = false;
-    saveState();
-    closeModal();
+function primePhraseDraft() {
+  state.orientation.phraseDraft = Array.from(PHRASE).map((char, index) => state.orientation.phraseLocks[index] || (isPhraseLetter(char) ? '' : char));
+}
+
+function nextPhraseIndex() {
+  const o = state.orientation;
+  for (let i = 0; i < PHRASE.length; i++) {
+    if (isPhraseLetter(PHRASE[i]) && !o.phraseLocks[i] && !o.phraseDraft[i]) return i;
+  }
+  for (let i = 0; i < PHRASE.length; i++) {
+    if (isPhraseLetter(PHRASE[i]) && !o.phraseLocks[i]) return i;
+  }
+  return -1;
+}
+
+function setPhraseCursor(index) {
+  if (state.orientation.phraseLocks[index]) return;
+  const currentValue = state.orientation.phraseDraft[index];
+  if (!currentValue) return;
+  state.orientation.phraseDraft[index] = '';
+}
+
+function insertPhraseLetter(letter) {
+  if (state.orientation.finished) return;
+  const index = nextPhraseIndex();
+  if (index === -1) return;
+  state.orientation.phraseDraft[index] = letter;
+  saveState();
+  if (phraseTryReady()) {
+    evaluatePhraseAttempt();
+  } else {
     render();
-  };
-  document.getElementById('closeModalBtn').onclick = closeModal;
+  }
 }
 
-function closeModal() {
-  document.getElementById('modalRoot').innerHTML = '';
+function phraseTryReady() {
+  return Array.from(PHRASE).every((char, index) => !isPhraseLetter(char) || state.orientation.phraseLocks[index] || state.orientation.phraseDraft[index]);
 }
 
-function submitPhrase() {
-  const lettersOk = allOrientationCorrect();
-  if (!lettersOk) return;
-
+function evaluatePhraseAttempt() {
   let allSolved = true;
   Array.from(PHRASE).forEach((char, index) => {
-    if (char === ' ' || /[,.!?]/.test(char)) {
+    if (!isPhraseLetter(char)) {
       state.orientation.phraseLocks[index] = char;
       state.orientation.phraseDraft[index] = char;
       return;
@@ -473,8 +481,8 @@ function submitPhrase() {
     if (draft === char) {
       state.orientation.phraseLocks[index] = char;
       state.orientation.phraseDraft[index] = char;
-    } else {
-      if (!state.orientation.phraseLocks[index]) state.orientation.phraseDraft[index] = '';
+    } else if (!state.orientation.phraseLocks[index]) {
+      state.orientation.phraseDraft[index] = '';
       allSolved = false;
     }
   });
@@ -490,6 +498,38 @@ function submitPhrase() {
     return;
   }
 
+  saveState();
+  render();
+}
+
+function phraseLetterDone(letter) {
+  const remainingIndexes = Array.from(PHRASE)
+    .map((char, index) => ({ char, index }))
+    .filter(item => item.char === letter && !state.orientation.phraseLocks[item.index]);
+
+  if (!remainingIndexes.length) return true;
+  return false;
+}
+
+function backspacePhrase() {
+  if (state.orientation.finished) return;
+  for (let i = PHRASE.length - 1; i >= 0; i--) {
+    if (isPhraseLetter(PHRASE[i]) && !state.orientation.phraseLocks[i] && state.orientation.phraseDraft[i]) {
+      state.orientation.phraseDraft[i] = '';
+      saveState();
+      render();
+      return;
+    }
+  }
+}
+
+function clearPhraseAttempt() {
+  if (state.orientation.finished) return;
+  Array.from(PHRASE).forEach((char, index) => {
+    if (isPhraseLetter(char) && !state.orientation.phraseLocks[index]) {
+      state.orientation.phraseDraft[index] = '';
+    }
+  });
   saveState();
   render();
 }
@@ -517,12 +557,13 @@ function bindDiscGolfGame() {
       grey: Number(grey),
       totalThrows: Number(blue) + Number(orange) + Number(grey),
       relative: Number(blue) - 3 + Number(orange) - 3 + Number(grey) - 2,
+      rating: discRating(Number(blue) - 3 + Number(orange) - 3 + Number(grey) - 2),
       createdAt: Date.now(),
     };
     state.discGolf.rounds.push(round);
     state.discGolf.current = { blue: '', orange: '', grey: '' };
     saveState();
-    alert(`Aplis saglabāts. Rezultāts: ${relativeScoreToText(round.relative)}`);
+    alert(`Aplis saglabāts. Rezultāts: ${relativeScoreToText(round.relative)} | Reitings: ${round.rating}`);
     render();
   });
 
@@ -540,7 +581,7 @@ function openAdminModal() {
       <div class="modal-card stack">
         <div>
           <p class="eyebrow">Admin</p>
-          <h3 class="section-title">Ievadi 4 ciparu PIN</h3>
+          <h3 class="section-title">PIN</h3>
         </div>
         <input id="adminPinInput" class="input" maxlength="4" inputmode="numeric" placeholder="1234" />
         <div class="grid-2">
@@ -565,21 +606,40 @@ function openAdminModal() {
 
 function openAdminPanel() {
   const root = document.getElementById('modalRoot');
+  const orientationStatus = allOrientationCorrect() ? 'Burti gatavi' : 'Procesā';
+  const playerRounds = state.discGolf.rounds.filter(r => r.player === state.playerName);
   root.innerHTML = `
     <div class="modal-backdrop">
-      <div class="modal-card stack">
+      <div class="modal-card stack admin-panel-wide">
         <div>
           <p class="eyebrow">Admin panelis</p>
-          <h3 class="section-title">Vadība</h3>
+          <h3 class="section-title">Rezultāti</h3>
         </div>
+
+        <div class="stack admin-section">
+          <div class="status-pill">Orientēšanās: ${orientationStatus}</div>
+          <div class="status-pill">Teikums: ${state.orientation.finished ? 'Pabeigts' : 'Nav pabeigts'}</div>
+          <div class="status-pill">Disku golfa apļi: ${playerRounds.length}</div>
+        </div>
+
         <label class="small muted">Aktīvā spēle</label>
         <select id="adminCurrentGame" class="input">
           ${GAME_LIST.map(game => `<option value="${game.id}" ${state.currentGame === game.id ? 'selected' : ''}>${game.id}. ${game.title}</option>`).join('')}
         </select>
+
+        <div class="stack">
+          <h4 class="section-title">Šīs ierīces disku golfa rezultāti</h4>
+          <div class="table leaderboard-table">
+            <div class="table-row head"><div>Vārds</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div></div>
+            ${state.discGolf.rounds.length ? state.discGolf.rounds.slice().reverse().map(r => `
+              <div class="table-row"><div>${escapeHtml(r.player)}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div></div>
+            `).join('') : '<div class="table-row"><div>Vēl nav</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
+          </div>
+        </div>
+
         <button id="saveAdminGameBtn" class="primary-btn">Saglabāt aktīvo spēli</button>
         <button id="clearLocalDataBtn" class="danger-btn">Dzēst visus šīs ierīces datus</button>
         <button id="closeAdminPanelBtn" class="secondary-btn">Aizvērt</button>
-        <p class="muted small">PIN maini failā app.js: const ADMIN_PIN = '1234';</p>
       </div>
     </div>
   `;
@@ -598,6 +658,10 @@ function openAdminPanel() {
     render();
   };
   document.getElementById('closeAdminPanelBtn').onclick = closeModal;
+}
+
+function closeModal() {
+  document.getElementById('modalRoot').innerHTML = '';
 }
 
 function startTimer() {
