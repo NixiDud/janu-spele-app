@@ -128,3 +128,17 @@ button { cursor: pointer; }
   .player-row { align-items: flex-start; flex-direction: column; }
   .basket-card { grid-template-columns: 1fr; }
 }
+
+
+.phrase-bank-row { display: grid; grid-template-columns: 1fr 56px; gap: 10px; align-items: start; }
+.icon-btn { border: 1px solid var(--line); background: rgba(255,255,255,0.08); color: white; border-radius: 16px; min-height: 52px; font-size: 1.15rem; font-weight: 800; }
+.icon-btn:disabled { opacity: .45; }
+.rounds-accordion { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.04); padding: 14px; }
+.rounds-accordion summary { cursor: pointer; font-weight: 800; }
+.rounds-accordion[open] summary { margin-bottom: 12px; }
+.table-row-6 { grid-template-columns: 1.1fr .6fr .6fr .6fr .7fr .8fr; }
+@media (max-width: 420px) {
+  .phrase-bank-row { grid-template-columns: 1fr; }
+  .icon-btn { min-height: 46px; }
+  .table-row, .table-row-6 { font-size: .82rem; }
+}

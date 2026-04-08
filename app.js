@@ -12,7 +12,7 @@ const GAME_LIST = [
   { id: 5, icon: '🌙', title: 'Spēle 5' },
 ];
 const PARS = { blue: 3, orange: 3, grey: 2 };
-const PHRASE_LETTERS = Array.from(new Set(Object.values(ORIENTATION_TARGET)));
+const PHRASE_LETTERS = Array.from(new Set(Array.from(PHRASE).filter(isPhraseLetter)));
 
 let state = loadState();
 let timerInterval = null;
@@ -75,6 +75,13 @@ function isPhraseLetter(char) {
 function relativeScoreToText(score) {
   if (score === 0) return 'E';
   return score > 0 ? `+${score}` : `${score}`;
+}
+
+
+function renderPreserveScroll() {
+  const scrollY = window.scrollY;
+  render();
+  requestAnimationFrame(() => window.scrollTo(0, scrollY));
 }
 
 function render() {
@@ -221,15 +228,13 @@ function renderPhrasePuzzle() {
           }).join('')}
         </div>
 
-        <div class="letter-bank phrase-bank">
-          ${PHRASE_LETTERS.map(letter => `
-            <button class="bank-item ${phraseLetterDone(letter) ? 'done' : ''}" data-bank-letter="${letter}" ${solved ? 'disabled' : ''}>${letter}</button>
-          `).join('')}
-        </div>
-
-        <div class="grid-2">
-          <button id="phraseBackspaceBtn" class="secondary-btn" ${solved ? 'disabled' : ''}>⌫ Dzēst</button>
-          <button id="phraseClearTryBtn" class="secondary-btn" ${solved ? 'disabled' : ''}>Notīrīt mēģ.</button>
+        <div class="phrase-bank-row">
+          <div class="letter-bank phrase-bank">
+            ${PHRASE_LETTERS.map(letter => `
+              <button class="bank-item ${phraseLetterDone(letter) ? 'done' : ''}" data-bank-letter="${letter}" ${solved || phraseLetterDone(letter) ? 'disabled' : ''}>${letter}</button>
+            `).join('')}
+          </div>
+          <button id="phraseBackspaceBtn" class="icon-btn" aria-label="Dzēst burtu" ${solved ? 'disabled' : ''}>⌫</button>
         </div>
       </div>
 
@@ -277,30 +282,27 @@ function renderDiscGolfGame() {
         </div>
       </div>
 
-      <div class="grid-2">
-        <button id="submitDiscRoundBtn" class="primary-btn">Iesniegt apli</button>
-        <button id="resetDiscCurrentBtn" class="secondary-btn">Spēlēt vēlreiz</button>
-      </div>
+      <button id="submitDiscRoundBtn" class="primary-btn">Iesniegt apli</button>
 
       <div class="stack">
-        <h4 class="section-title">Līderu tops</h4>
+        <h4 class="section-title">Leaderboard</h4>
         <div class="table leaderboard-table">
-          <div class="table-row head"><div>Vārds</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div></div>
+          <div class="table-row head table-row-6"><div>Vārds</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div><div>Reit.</div></div>
           ${bestRows.length ? bestRows.map(r => `
-            <div class="table-row"><div>${escapeHtml(r.player)}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div></div>
-          `).join('') : '<div class="table-row"><div>Vēl nav rezultātu</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
+            <div class="table-row table-row-6"><div>${escapeHtml(r.player)}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div><div>${r.rating}</div></div>
+          `).join('') : '<div class="table-row table-row-6"><div>Vēl nav rezultātu</div><div>—</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
         </div>
       </div>
 
-      <div class="stack">
-        <h4 class="section-title">Mani apļi</h4>
+      <details class="rounds-accordion">
+        <summary>Mani apļi</summary>
         <div class="table leaderboard-table">
-          <div class="table-row head"><div>Reize</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div></div>
+          <div class="table-row head table-row-6"><div>Reize</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div><div>Reit.</div></div>
           ${playerRounds.length ? playerRounds.map((r, i) => `
-            <div class="table-row"><div>#${i + 1}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div></div>
-          `).join('') : '<div class="table-row"><div>Vēl nav</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
+            <div class="table-row table-row-6"><div>#${i + 1}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div><div>${r.rating}</div></div>
+          `).join('') : '<div class="table-row table-row-6"><div>Vēl nav</div><div>—</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
         </div>
-      </div>
+      </details>
     </div>
   `;
 }
@@ -313,7 +315,7 @@ function renderBasketCard(title, color, par) {
         <div class="basket-title">${title}</div>
         <div class="basket-par">PAR ${par}</div>
       </div>
-      <input id="score${id}" class="score-input big-score-input" type="number" min="1" inputmode="numeric" value="${state.discGolf.current[color]}" placeholder="0" />
+      <input id="score${id}" class="score-input big-score-input" type="number" min="0" inputmode="numeric" value="${state.discGolf.current[color]}" placeholder="0" />
       <div class="score-tag ${scoreClass(scoreDiff(color))}">${relativeScoreToText(scoreDiff(color))}</div>
     </div>
   `;
@@ -397,11 +399,16 @@ function bindOrientationGame() {
       const index = Number(e.target.dataset.letterIndex);
       const value = (e.target.value || '').trim().toUpperCase().slice(0, 1);
       state.orientation.letters[index] = value;
+      const card = e.target.closest('.letter-card');
+      card?.classList.remove('correct', 'incorrect');
+      if (value) card?.classList.add(value === ORIENTATION_TARGET[index] ? 'correct' : 'incorrect');
       if (allOrientationCorrect() && !state.orientation.finished) {
         primePhraseDraft();
+        saveState();
+        renderPreserveScroll();
+        return;
       }
       saveState();
-      render();
     });
   });
 
@@ -416,12 +423,11 @@ function bindOrientationGame() {
       const index = Number(btn.dataset.phraseSlot);
       setPhraseCursor(index);
       saveState();
-      render();
+      renderPreserveScroll();
     });
   });
 
   document.getElementById('phraseBackspaceBtn')?.addEventListener('click', backspacePhrase);
-  document.getElementById('phraseClearTryBtn')?.addEventListener('click', clearPhraseAttempt);
 
   if (state.orientation.startedAt && !state.orientation.finished) startTimer();
 }
@@ -454,6 +460,7 @@ function setPhraseCursor(index) {
 
 function insertPhraseLetter(letter) {
   if (state.orientation.finished) return;
+  if (phraseLetterDone(letter)) return;
   const index = nextPhraseIndex();
   if (index === -1) return;
   state.orientation.phraseDraft[index] = letter;
@@ -461,7 +468,7 @@ function insertPhraseLetter(letter) {
   if (phraseTryReady()) {
     evaluatePhraseAttempt();
   } else {
-    render();
+    renderPreserveScroll();
   }
 }
 
@@ -503,12 +510,12 @@ function evaluatePhraseAttempt() {
 }
 
 function phraseLetterDone(letter) {
-  const remainingIndexes = Array.from(PHRASE)
-    .map((char, index) => ({ char, index }))
-    .filter(item => item.char === letter && !state.orientation.phraseLocks[item.index]);
-
-  if (!remainingIndexes.length) return true;
-  return false;
+  const total = Array.from(PHRASE).filter(char => char === letter).length;
+  const used = Array.from(PHRASE).reduce((count, char, index) => {
+    if (char !== letter) return count;
+    return count + ((state.orientation.phraseLocks[index] === letter || state.orientation.phraseDraft[index] === letter) ? 1 : 0);
+  }, 0);
+  return used >= total;
 }
 
 function backspacePhrase() {
@@ -517,30 +524,21 @@ function backspacePhrase() {
     if (isPhraseLetter(PHRASE[i]) && !state.orientation.phraseLocks[i] && state.orientation.phraseDraft[i]) {
       state.orientation.phraseDraft[i] = '';
       saveState();
-      render();
+      renderPreserveScroll();
       return;
     }
   }
-}
-
-function clearPhraseAttempt() {
-  if (state.orientation.finished) return;
-  Array.from(PHRASE).forEach((char, index) => {
-    if (isPhraseLetter(char) && !state.orientation.phraseLocks[index]) {
-      state.orientation.phraseDraft[index] = '';
-    }
-  });
-  saveState();
-  render();
 }
 
 function bindDiscGolfGame() {
   ['blue', 'orange', 'grey'].forEach(color => {
     const input = document.getElementById(`score${capitalize(color)}`);
     input?.addEventListener('input', (e) => {
-      state.discGolf.current[color] = e.target.value;
+      const cleaned = Math.max(0, Number(e.target.value || 0));
+      state.discGolf.current[color] = e.target.value === '' ? '' : String(cleaned);
+      if (e.target.value !== '') e.target.value = String(cleaned);
       saveState();
-      render();
+      renderPreserveScroll();
     });
   });
 
@@ -567,11 +565,6 @@ function bindDiscGolfGame() {
     render();
   });
 
-  document.getElementById('resetDiscCurrentBtn')?.addEventListener('click', () => {
-    state.discGolf.current = { blue: '', orange: '', grey: '' };
-    saveState();
-    render();
-  });
 }
 
 function openAdminModal() {
