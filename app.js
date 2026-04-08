@@ -12,7 +12,7 @@ const GAME_LIST = [
   { id: 5, icon: '🌙', title: 'Spēle 5' },
 ];
 const PARS = { blue: 3, orange: 3, grey: 2 };
-const PHRASE_LETTERS = Array.from(new Set(Array.from(PHRASE).filter(isPhraseLetter)));
+const PHRASE_LETTERS = Array.from(new Set(Array.from(PHRASE).filter(isPhraseLetter))).sort((a, b) => a.localeCompare(b, 'lv'));
 
 let state = loadState();
 let timerInterval = null;
@@ -34,7 +34,8 @@ function defaultState() {
     },
     discGolf: {
       rounds: [],
-      current: { blue: '', orange: '', grey: '' }
+      current: { blue: '', orange: '', grey: '' },
+      view: 'leaderboard'
     }
   };
 }
@@ -254,6 +255,7 @@ function renderDiscGolfGame() {
   const bestRows = buildLeaderboard(rounds);
   const currentRelative = currentDiscRelative();
   const currentRating = discRating(currentRelative);
+  const activeView = state.discGolf.view || 'leaderboard';
 
   return `
     <div class="stack">
@@ -284,25 +286,30 @@ function renderDiscGolfGame() {
 
       <button id="submitDiscRoundBtn" class="primary-btn">Iesniegt apli</button>
 
-      <div class="stack">
-        <h4 class="section-title">Leaderboard</h4>
-        <div class="table leaderboard-table">
-          <div class="table-row head table-row-6"><div>Vārds</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div><div>Reit.</div></div>
-          ${bestRows.length ? bestRows.map(r => `
-            <div class="table-row table-row-6"><div>${escapeHtml(r.player)}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div><div>${r.rating}</div></div>
-          `).join('') : '<div class="table-row table-row-6"><div>Vēl nav rezultātu</div><div>—</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
-        </div>
+      <div class="section-switcher">
+        <button class="section-toggle ${activeView === 'leaderboard' ? 'active' : ''}" data-disc-view="leaderboard">Leaderboard</button>
+        <button class="section-toggle ${activeView === 'myRounds' ? 'active' : ''}" data-disc-view="myRounds">Mani apļi</button>
       </div>
 
-      <details class="rounds-accordion">
-        <summary>Mani apļi</summary>
-        <div class="table leaderboard-table">
-          <div class="table-row head table-row-6"><div>Reize</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div><div>Reit.</div></div>
-          ${playerRounds.length ? playerRounds.map((r, i) => `
-            <div class="table-row table-row-6"><div>#${i + 1}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div><div>${r.rating}</div></div>
-          `).join('') : '<div class="table-row table-row-6"><div>Vēl nav</div><div>—</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
+      ${activeView === 'leaderboard' ? `
+        <div class="stack">
+          <div class="table leaderboard-table">
+            <div class="table-row head table-row-6"><div>Vārds</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div><div>Reit.</div></div>
+            ${bestRows.length ? bestRows.map(r => `
+              <div class="table-row table-row-6"><div>${escapeHtml(r.player)}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div><div>${r.rating}</div></div>
+            `).join('') : '<div class="table-row table-row-6"><div>Vēl nav rezultātu</div><div>—</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
+          </div>
         </div>
-      </details>
+      ` : `
+        <div class="stack">
+          <div class="table leaderboard-table">
+            <div class="table-row head table-row-6"><div>Reize</div><div>Z</div><div>O</div><div>P</div><div>Kopā</div><div>Reit.</div></div>
+            ${playerRounds.length ? playerRounds.map((r, i) => `
+              <div class="table-row table-row-6"><div>#${i + 1}</div><div>${r.blue}</div><div>${r.orange}</div><div>${r.grey}</div><div>${relativeScoreToText(r.relative)}</div><div>${r.rating}</div></div>
+            `).join('') : '<div class="table-row table-row-6"><div>Vēl nav</div><div>—</div><div>—</div><div>—</div><div>—</div><div>—</div></div>'}
+          </div>
+        </div>
+      `}
     </div>
   `;
 }
@@ -511,12 +518,13 @@ function evaluatePhraseAttempt() {
 
 function phraseLetterDone(letter) {
   const total = Array.from(PHRASE).filter(char => char === letter).length;
-  const used = Array.from(PHRASE).reduce((count, char, index) => {
-    if (char !== letter) return count;
-    return count + ((state.orientation.phraseLocks[index] === letter || state.orientation.phraseDraft[index] === letter) ? 1 : 0);
+  const used = state.orientation.phraseLocks.reduce((count, current, index) => {
+    const draftCurrent = state.orientation.phraseDraft[index];
+    return count + ((current === letter || draftCurrent === letter) ? 1 : 0);
   }, 0);
   return used >= total;
 }
+
 
 function backspacePhrase() {
   if (state.orientation.finished) return;
@@ -537,6 +545,14 @@ function bindDiscGolfGame() {
       const cleaned = Math.max(0, Number(e.target.value || 0));
       state.discGolf.current[color] = e.target.value === '' ? '' : String(cleaned);
       if (e.target.value !== '') e.target.value = String(cleaned);
+      saveState();
+      renderPreserveScroll();
+    });
+  });
+
+  document.querySelectorAll('[data-disc-view]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.discGolf.view = btn.dataset.discView;
       saveState();
       renderPreserveScroll();
     });
