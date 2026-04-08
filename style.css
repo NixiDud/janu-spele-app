@@ -17,11 +17,12 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: radial-gradient(circle at top, #1e293b 0%, #0f172a 55%, #020617 100%); color: var(--text); font-family: Inter, system-ui, sans-serif; min-height: 100%; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; min-height: 100%; overscroll-behavior-y: none; }
+body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(circle at top, #1e293b 0%, #0f172a 55%, #020617 100%); z-index: -1; }
 button, input, select { font: inherit; }
-button { cursor: pointer; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
-.app-shell { width: 100%; max-width: 480px; margin: 0 auto; min-height: 100vh; padding: 16px 14px 28px; }
+.app-shell { width: 100%; max-width: 480px; margin: 0 auto; min-height: 100dvh; padding: calc(env(safe-area-inset-top, 0px) + 16px) 14px calc(env(safe-area-inset-bottom, 0px) + 28px); }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .topbar h1 { margin: 0; font-size: 1.6rem; }
 .eyebrow { margin: 0 0 6px; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .12em; }

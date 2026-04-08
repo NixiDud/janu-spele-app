@@ -80,9 +80,11 @@ function relativeScoreToText(score) {
 
 
 function renderPreserveScroll() {
-  const scrollY = window.scrollY;
+  const scrollY = window.scrollY || window.pageYOffset || 0;
+  const active = document.activeElement;
+  if (active && typeof active.blur === 'function' && active !== document.body) active.blur();
   render();
-  requestAnimationFrame(() => window.scrollTo(0, scrollY));
+  requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
 }
 
 function render() {
@@ -369,6 +371,19 @@ function scoreClass(score) {
   return 'neutral';
 }
 
+
+function bindStableToggle(selector, onClick) {
+  document.querySelectorAll(selector).forEach(btn => {
+    const handler = (e) => e.preventDefault();
+    btn.addEventListener('mousedown', handler);
+    btn.addEventListener('touchstart', handler, { passive: false });
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      onClick(btn, e);
+    });
+  });
+}
+
 function bindWelcome() {
   const input = document.getElementById('nameInput');
   input?.focus();
@@ -388,14 +403,12 @@ function bindWelcome() {
 
 function bindCommon() {
   document.getElementById('adminOpenBtn').onclick = openAdminModal;
-  document.querySelectorAll('[data-game-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const gameId = Number(btn.dataset.gameTab);
-      if (!state.unlockedGames.includes(gameId)) return;
-      state.currentGame = gameId;
-      saveState();
-      render();
-    });
+  bindStableToggle('[data-game-tab]', (btn) => {
+    const gameId = Number(btn.dataset.gameTab);
+    if (!state.unlockedGames.includes(gameId)) return;
+    state.currentGame = gameId;
+    saveState();
+    renderPreserveScroll();
   });
 }
 
@@ -563,12 +576,10 @@ function bindDiscGolfGame() {
     });
   });
 
-  document.querySelectorAll('[data-disc-view]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.discGolf.view = btn.dataset.discView;
-      saveState();
-      renderPreserveScroll();
-    });
+  bindStableToggle('[data-disc-view]', (btn) => {
+    state.discGolf.view = btn.dataset.discView;
+    saveState();
+    renderPreserveScroll();
   });
 
   document.getElementById('submitDiscRoundBtn')?.addEventListener('click', () => {
