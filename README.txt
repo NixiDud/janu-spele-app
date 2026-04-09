@@ -1,6 +1,6 @@
-JĀŅU SPĒĻU APP - MVP
+JĀŅU SPĒĻU APP - FIXED BUILD
 
-Kas ir gatavs:
+Kas ir iekšā šajā versijā:
 - Vārda ievade
 - Admin PIN logs (1234)
 - 5 spēļu augšējās ikonas
@@ -9,14 +9,18 @@ Kas ir gatavs:
 - 2. spēle: disku golfs ar 3 groziem, PAR aprēķins, rezultātu saraksts
 - 3., 4., 5. spēlei ir tukšas lapas
 
+Labojumi šajā buildā:
+- Noņemta agresīvā touch/mousedown preventDefault loģika, kas varēja traucēt pogu nospiešanu telefonā
+- Disku golfa score ievadē vairs netiek pārzīmēts viss ekrāns pie katra cipara
+- Pievienota assets mape ar bildēm, lai projekts būtu pilns un uzreiz palaižams
+
 Svarīgi:
 - Šī versija glabā datus TIKAI konkrētajā ierīcē (localStorage).
 - Tāpēc kopīgs leaderboard visiem telefoniem šeit vēl nav.
-- Ja gribi, nākamajā solī var pielikt bezmaksas Supabase, lai visi redz vienu kopīgu leaderboard un admin izmaiņas.
 
 Kā palaist ļoti vienkārši:
 1) Atver šo mapi VS Code.
-2) Uzinstalē paplašinājumu "Live Server" VAI vienkārši augšupielādē failus uz Vercel / Netlify.
+2) Uzinstalē paplašinājumu "Live Server" VAI augšupielādē failus uz Vercel / Netlify.
 3) Atver index.html ar Live Server.
 
 Ko vari ātri mainīt pati:
@@ -24,6 +28,6 @@ Ko vari ātri mainīt pati:
 - Teikums: const PHRASE = 'KUR UGUNS, TUR JĀŅI.';
 - Burti 1-11: const ORIENTATION_TARGET = { ... }
 
-Nākamais loģiskais solis:
+Ieteicamais nākamais solis:
 - pielikt kopīgu online datubāzi leaderboardam un admin vadībai
 - pievienot 3., 4. un 5. spēles saturu

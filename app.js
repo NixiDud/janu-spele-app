@@ -509,13 +509,7 @@ function scoreClass(score) {
 
 function bindStableToggle(selector, onClick) {
   document.querySelectorAll(selector).forEach(btn => {
-    const handler = e => e.preventDefault();
-
-    btn.addEventListener('mousedown', handler);
-    btn.addEventListener('touchstart', handler, { passive: false });
-
     btn.addEventListener('click', e => {
-      e.preventDefault();
       onClick(btn, e);
     });
   });
@@ -756,20 +750,61 @@ function backspacePhrase() {
   }
 }
 
+
+function updateDiscGolfLiveSummary() {
+  const hasLiveRound = hasAnyDiscValue();
+  const currentRelative = currentDiscRelative();
+  const currentRating = discRating(currentRelative);
+
+  ['blue', 'orange', 'grey'].forEach(color => {
+    const input = document.getElementById(`score${capitalize(color)}`);
+    const tag = input?.closest('.basket-card')?.querySelector('.score-tag');
+
+    if (!tag) return;
+
+    const diff = scoreDiff(color);
+    tag.className = `score-tag ${scoreClass(diff)}`;
+    tag.textContent = relativeScoreToText(diff);
+  });
+
+  const summaryBoxes = document.querySelectorAll('.result-summary .result-box strong');
+  if (summaryBoxes[1]) {
+    summaryBoxes[1].textContent = hasLiveRound ? relativeScoreToText(currentRelative) : '-';
+  }
+
+  if (summaryBoxes[2]) {
+    summaryBoxes[2].textContent = hasLiveRound ? currentRating : '-';
+  }
+
+  const ratingBox = document.querySelector('.rating-box');
+  if (ratingBox) {
+    ratingBox.classList.remove('up', 'down', 'even');
+    if (hasLiveRound) {
+      ratingBox.classList.add(ratingClass(currentRelative));
+    }
+  }
+}
+
 function bindDiscGolfGame() {
   ['blue', 'orange', 'grey'].forEach(color => {
     const input = document.getElementById(`score${capitalize(color)}`);
 
     input?.addEventListener('input', e => {
-      const cleaned = Math.max(0, Number(e.target.value || 0));
-      state.discGolf.current[color] = e.target.value === '' ? '' : String(cleaned);
+      const rawValue = e.target.value;
 
-      if (e.target.value !== '') {
-        e.target.value = String(cleaned);
+      if (rawValue === '') {
+        state.discGolf.current[color] = '';
+        saveState();
+        updateDiscGolfLiveSummary();
+        return;
       }
 
+      const cleaned = Math.max(0, Number(rawValue || 0));
+      state.discGolf.current[color] = String(cleaned);
+      e.target.value = String(cleaned);
+
       saveState();
-      renderPreserveScroll();
+      updateDiscGolfLiveSummary();
     });
   });
 
