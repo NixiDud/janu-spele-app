@@ -1,5 +1,10 @@
-const APP_KEY = 'janu_spele_app_v2';
+const APP_KEY = 'janu_spele_app_v3';
 const ADMIN_PIN = '1234';
+
+const SUPABASE_URL = 'https://gsnirplvihapyrldexaz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzbmlycGx2aWhhcHlybGRleGF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3MjY1NTUsImV4cCI6MjA5MTMwMjU1NX0.bjoycu5KEw6geCD4w7cRfp8Y6ZbCgsM4iMv8LDnD4mg';
+
+const supabase = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) ?? null;
 
 const ORIENTATION_TARGET = {
   1: 'K',
@@ -50,6 +55,7 @@ function defaultState() {
       phraseDraft: Array.from(PHRASE).map(ch => (isPhraseLetter(ch) ? '' : ch)),
       finished: false,
       finalTimeSec: null,
+      cloudSaved: false,
     },
     discGolf: {
       rounds: [],
@@ -114,11 +120,7 @@ function renderPreserveScroll() {
   const scrollY = window.scrollY || window.pageYOffset || 0;
   const active = document.activeElement;
 
-  if (
-    active &&
-    typeof active.blur === 'function' &&
-    active !== document.body
-  ) {
+  if (active && typeof active.blur === 'function' && active !== document.body) {
     active.blur();
   }
 
@@ -485,20 +487,20 @@ function buildLeaderboard(rounds) {
   const bestByPlayer = new Map();
 
   rounds.forEach(round => {
-    const existing = bestByPlayer.get(round.player);
+    const existing = bestByPlayer.get(round.player_name || round.player);
 
     if (
       !existing ||
       round.relative < existing.relative ||
-      (round.relative === existing.relative && round.totalThrows < existing.totalThrows)
+      (round.relative === existing.relative && round.total_throws < existing.total_throws)
     ) {
-      bestByPlayer.set(round.player, round);
+      bestByPlayer.set(round.player_name || round.player, round);
     }
   });
 
   return [...bestByPlayer.values()]
-    .sort((a, b) => a.relative - b.relative || a.totalThrows - b.totalThrows)
-    .slice(0, 10);
+    .sort((a, b) => a.relative - b.relative || a.total_throws - b.total_throws)
+    .slice(0, 20);
 }
 
 function scoreClass(score) {
@@ -519,7 +521,7 @@ function bindWelcome() {
   const input = document.getElementById('nameInput');
   input?.focus();
 
-  document.getElementById('startAppBtn').addEventListener('click', () => {
+  document.getElementById('startAppBtn').addEventListener('click', async () => {
     const val = input.value.trim();
 
     if (!val) {
@@ -529,6 +531,7 @@ function bindWelcome() {
 
     state.playerName = val;
     saveState();
+    await ensurePlayerExists();
     render();
   });
 }
@@ -673,7 +676,7 @@ function phraseTryReady() {
   );
 }
 
-function evaluatePhraseAttempt() {
+async function evaluatePhraseAttempt() {
   let allSolved = true;
 
   Array.from(PHRASE).forEach((char, index) => {
@@ -704,6 +707,7 @@ function evaluatePhraseAttempt() {
     stopTimer();
     render();
     launchConfetti();
+    await saveOrientationResultToCloud(state.orientation.finalTimeSec);
     return;
   }
 
@@ -750,7 +754,6 @@ function backspacePhrase() {
   }
 }
 
-
 function updateDiscGolfLiveSummary() {
   const hasLiveRound = hasAnyDiscValue();
   const currentRelative = currentDiscRelative();
@@ -768,6 +771,7 @@ function updateDiscGolfLiveSummary() {
   });
 
   const summaryBoxes = document.querySelectorAll('.result-summary .result-box strong');
+
   if (summaryBoxes[1]) {
     summaryBoxes[1].textContent = hasLiveRound ? relativeScoreToText(currentRelative) : '-';
   }
@@ -814,7 +818,7 @@ function bindDiscGolfGame() {
     renderPreserveScroll();
   });
 
-  document.getElementById('submitDiscRoundBtn')?.addEventListener('click', () => {
+  document.getElementById('submitDiscRoundBtn')?.addEventListener('click', async () => {
     const { blue, orange, grey } = state.discGolf.current;
 
     if (!blue || !orange || !grey) {
@@ -841,6 +845,8 @@ function bindDiscGolfGame() {
     state.discGolf.rounds.push(round);
     state.discGolf.current = { blue: '', orange: '', grey: '' };
     saveState();
+
+    await saveDiscRoundToCloud(round);
 
     alert(`Aplis saglabāts. Rezultāts: ${relativeScoreToText(round.relative)} | Reitings: ${round.rating}`);
     render();
@@ -911,9 +917,9 @@ function openAdminPanel() {
   `;
 
   document.querySelectorAll('[data-admin-game]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const gameId = Number(btn.dataset.adminGame);
-      renderAdminContent(gameId);
+      await renderAdminContent(gameId);
     });
   });
 
@@ -931,32 +937,43 @@ function openAdminPanel() {
   renderAdminContent(1);
 }
 
-function renderAdminContent(gameId) {
+async function renderAdminContent(gameId) {
   const el = document.getElementById('adminContent');
   if (!el) return;
 
+  el.innerHTML = `<div class="status-pill">Ielādē datus...</div>`;
+
   if (gameId === 1) {
-    const finalTime = state.orientation.finalTimeSec
-      ? formatSeconds(state.orientation.finalTimeSec)
-      : '-';
+    const rows = await fetchOrientationResultsFromCloud();
 
     el.innerHTML = `
       <div class="table leaderboard-table">
         <div class="table-row head"><div>Vārds</div><div>Laiks</div><div></div><div></div><div></div></div>
-        <div class="table-row">
-          <div>${escapeHtml(state.playerName || '-')}</div>
-          <div>${finalTime}</div>
-          <div>—</div>
-          <div>—</div>
-          <div>—</div>
-        </div>
+        ${
+          rows.length
+            ? rows.map(r => `
+              <div class="table-row">
+                <div>${escapeHtml(r.player_name)}</div>
+                <div>${formatSeconds(r.final_time_sec)}</div>
+                <div>—</div>
+                <div>—</div>
+                <div>—</div>
+              </div>
+            `).join('')
+            : `
+              <div class="table-row">
+                <div>Vēl nav rezultātu</div><div>—</div><div>—</div><div>—</div><div>—</div>
+              </div>
+            `
+        }
       </div>
     `;
     return;
   }
 
   if (gameId === 2) {
-    const rows = buildLeaderboard(state.discGolf.rounds);
+    const remoteRounds = await fetchDiscRoundsFromCloud();
+    const rows = buildLeaderboard(remoteRounds);
 
     el.innerHTML = `
       <div class="table leaderboard-table">
@@ -967,7 +984,7 @@ function renderAdminContent(gameId) {
           rows.length
             ? rows.map(r => `
               <div class="table-row table-row-6">
-                <div>${escapeHtml(r.player)}</div>
+                <div>${escapeHtml(r.player_name)}</div>
                 <div>${r.blue}</div>
                 <div>${r.orange}</div>
                 <div>${r.grey}</div>
@@ -992,6 +1009,90 @@ function renderAdminContent(gameId) {
       <p class="muted">Šai spēlei rezultāti vēl nav pievienoti.</p>
     </div>
   `;
+}
+
+async function ensurePlayerExists() {
+  if (!supabase || !state.playerName) return;
+
+  const { error } = await supabase
+    .from('players')
+    .upsert({ player_name: state.playerName }, { onConflict: 'player_name' });
+
+  if (error) {
+    console.error('players upsert error', error);
+  }
+}
+
+async function saveOrientationResultToCloud(finalTimeSec) {
+  if (!supabase || !state.playerName || state.orientation.cloudSaved) return;
+
+  const { error } = await supabase
+    .from('orientation_results')
+    .insert({
+      player_name: state.playerName,
+      final_time_sec: finalTimeSec
+    });
+
+  if (error) {
+    console.error('orientation insert error', error);
+    return;
+  }
+
+  state.orientation.cloudSaved = true;
+  saveState();
+}
+
+async function saveDiscRoundToCloud(round) {
+  if (!supabase || !state.playerName) return;
+
+  const { error } = await supabase
+    .from('disc_golf_rounds')
+    .insert({
+      player_name: round.player,
+      blue: round.blue,
+      orange: round.orange,
+      grey: round.grey,
+      total_throws: round.totalThrows,
+      relative: round.relative,
+      rating: round.rating
+    });
+
+  if (error) {
+    console.error('disc round insert error', error);
+  }
+}
+
+async function fetchOrientationResultsFromCloud() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('orientation_results')
+    .select('player_name, final_time_sec, created_at')
+    .order('final_time_sec', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('orientation fetch error', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function fetchDiscRoundsFromCloud() {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('disc_golf_rounds')
+    .select('player_name, blue, orange, grey, total_throws, relative, rating, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('disc rounds fetch error', error);
+    return [];
+  }
+
+  return data || [];
 }
 
 function closeModal() {
